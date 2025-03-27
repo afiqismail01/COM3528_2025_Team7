@@ -19,6 +19,7 @@ Basic setup for MiRo project.
 2. Build workspace:
 
     ```bash
+    cd ~/catkin_ws
     catkin build com3528_2025_Team7
     source devel/setup.bash
     ```
