@@ -20,7 +20,7 @@ Basic setup for MiRo project.
 
     ```bash
     cd ~/catkin_ws
-    catkin build
+    catkin build COM3528_2025_Team7
     source devel/setup.bash
     ```
 ## Usage
