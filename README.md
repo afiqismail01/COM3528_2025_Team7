@@ -1,4 +1,4 @@
-# COM3528_Team7
+# com3528_2025_Team7
 
 Basic setup for MiRo project.
 
@@ -28,5 +28,5 @@ Basic setup for MiRo project.
 1. Start ROS:
 
     ```bash
-    roslaunch com3528_team7 empty_world.launch
+    roslaunch com3528_2025_Team7 empty_world.launch
     ```
