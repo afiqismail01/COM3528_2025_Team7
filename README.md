@@ -13,7 +13,7 @@ Basic setup for MiRo project.
 
     ```bash
     cd ~/catkin_ws/src
-    git clone https://github.com/EIliott/COM3528_2025_Team7.git
+    git clone https://github.com/afiqismail01/COM3528_2025_Team7.git
     ```
 
 2. Build workspace:
