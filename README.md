@@ -30,6 +30,7 @@ Basic setup for MiRo project.
     catkin clean
     ```
 ## Usage
+All created development python codes should be placed in `src` directory.
 
 1. Make the script in the `src` folder executable:
 
@@ -43,5 +44,17 @@ Basic setup for MiRo project.
     roslaunch com3528_2025_Team7 empty_world.launch
     ```
 
+## Development Helper
 
+1. Target MiRo before running `rosrun` command for assigning the code to a particular MiRo
 
+    ```bash
+    // MIRO_ROBOT_NAME=miro01
+    export MIRO_ROBOT_NAME=<miro_robot_name>
+    ```
+
+2. Rosrun:
+
+    ```bash
+    rosrun com3528_2025_Team7 <script_name>.py
+    ```
