@@ -24,7 +24,7 @@
 
     <!-- MiRo1 behaviour -->
     <env name="MIRO_ROBOT_NAME" value="miro01" />
-    <node ns="miro01" name="circle_motion_01" pkg="com3528_2025_Team7" type="circle_motion.py" />
+    <!-- <node ns="miro01" name="boids_separation" pkg="com3528_2025_Team7" type="boids_separation.py" /> -->
 
     <!-- Start Gazebo client -->
     <node name="gazebo_gui"
