@@ -57,4 +57,6 @@ All created development python codes should be placed in `src` directory.
 
     ```bash
     rosrun com3528_2025_Team7 <script_name>.py
+
+test
     ```
