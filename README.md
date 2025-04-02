@@ -41,7 +41,7 @@ All created development python codes should be placed in `src` directory.
 2. Start ROS:
 
     ```bash
-    roslaunch com3528_2025_Team7 empty_world.launch
+    roslaunch com3528_2025_Team7 main.launch
     ```
 
 ## Development Helper
@@ -58,5 +58,4 @@ All created development python codes should be placed in `src` directory.
     ```bash
     rosrun com3528_2025_Team7 <script_name>.py
 
-test
     ```
