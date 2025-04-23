@@ -1,4 +1,4 @@
-# com3528_2025_Team7
+# CREATE PACAKGE WITH NAME "com3528_2025_team7" or it wont work
 
 Basic setup for MiRo project.
 
