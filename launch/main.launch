@@ -8,7 +8,7 @@
         value="$(optenv MIRO_DIR_MDK)/bin/${MIRO_SYSTEM}:$(optenv GAZEBO_PLUGIN_PATH)" />
 
     <!-- Specify which .world file to load -->
-    <arg name="world" default="$(find com3528_2025_Team7)/worlds/empty.world"/>
+    <arg name="world" default="$(find com3528_2025_team7)/worlds/empty.world"/>
 
     <!-- Set the name for Gazebo -->
     <arg name="gazebo_ns" default="gazebo_server" doc="Gazebo namespace, typically 'gazebo' or 'gazebo_server'" />
@@ -24,7 +24,7 @@
 
     <!-- MiRo1 behaviour -->
     <env name="MIRO_ROBOT_NAME" value="miro01" />
-    <!-- <node ns="miro01" name="boids_separation" pkg="com3528_2025_Team7" type="boids_separation.py" /> -->
+    <!-- <node ns="miro01" name="boids_separation" pkg="com3528_2025_team7" type="boids_separation.py" /> -->
 
     <!-- Start Gazebo client -->
     <node name="gazebo_gui"

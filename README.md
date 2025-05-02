@@ -1,4 +1,4 @@
-# CREATE PACAKGE WITH NAME "com3528_2025_team7" or it wont work
+# com3528_2025_team7
 
 Basic setup for MiRo project.
 
@@ -20,7 +20,7 @@ Basic setup for MiRo project.
 
     ```bash
     cd ~/catkin_ws
-    catkin build com3528_2025_Team7
+    catkin build com3528_2025_team7
     source devel/setup.bash
     ```
 
@@ -35,13 +35,13 @@ All created development python codes should be placed in `src` directory.
 1. Make the script in the `src` folder executable:
 
     ```bash
-    chmod +x ~/catkin_ws/src/COM3528_2025_Team7/src/<script_name>.py
+    chmod +x ~/catkin_ws/src/com3528_2025_team7/src/<script_name>.py
     ```
 
 2. Start ROS:
 
     ```bash
-    roslaunch com3528_2025_Team7 main.launch
+    roslaunch com3528_2025_team7 main.launch
     ```
 
 ## Development Helper
@@ -56,6 +56,6 @@ All created development python codes should be placed in `src` directory.
 2. Rosrun:
 
     ```bash
-    rosrun com3528_2025_Team7 <script_name>.py
+    rosrun com3528_2025_team7 <script_name>.py
 
     ```
