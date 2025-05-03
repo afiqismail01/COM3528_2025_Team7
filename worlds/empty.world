@@ -25,9 +25,5 @@
 			<pose>0 0 0 0 0 0</pose>
 		</include>
 
-        <include>
-			<uri>model://miro_toy_ball</uri>
-			<pose>0.6 -0.3 0.15 0 0 0</pose>
-		</include>
     </world>
 </sdf>

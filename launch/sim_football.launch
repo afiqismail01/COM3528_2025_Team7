@@ -31,16 +31,16 @@
   />
 
   <!-- MiRo1 behaviour -->
-  <env name="MIRO_ROBOT_NAME" value="miro01" />
-  <node ns="miro01" name="kick_blue_ball_01" pkg="com3528_2025_team7" type="kick_blue_ball.py" />
+  <!-- <env name="MIRO_ROBOT_NAME" value="miro01" />
+  <node ns="miro01" name="boid_01" pkg="com3528_2025_team7" type="kick_blue_ball.py" /> -->
 
   <!-- MiRo2 behaviour -->
   <env name="MIRO_ROBOT_NAME" value="miro02" />
-  <node ns="miro02" name="kick_blue_ball_02" pkg="com3528_2025_team7" type="kick_blue_ball.py" />
+  <!-- <node ns="miro02" name="boid_02" pkg="com3528_2025_team7" type="boid_main.py" /> -->
 
   <!-- MiRo3 behaviour -->
   <env name="MIRO_ROBOT_NAME" value="miro03" />
-  <node ns="miro03" name="kick_blue_ball_03" pkg="com3528_2025_team7" type="kick_blue_ball.py" />
+  <node ns="miro03" name="boid_03" pkg="com3528_2025_team7" type="circle_motion.py" />
 
   <!-- Start Gazebo client -->
   <node name="gazebo_gui"
