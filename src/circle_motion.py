@@ -65,7 +65,7 @@ class MiroClient:
         rate = rospy.Rate(1 / self.TICK)  # Set loop rate
         
         while not rospy.core.is_shutdown():
-            self.drive(speed_l=0.1, speed_r=0.3)  # Adjust these values for different circular paths
+            self.drive(speed_l=0.4, speed_r=0.35) # Adjust these values for different circular paths
             rate.sleep()
 
 if __name__ == "__main__":
