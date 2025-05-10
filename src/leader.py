@@ -5,7 +5,7 @@ from geometry_msgs.msg import TwistStamped
 from sensor_msgs.msg import JointState, Range
 
 SAFE_DISTANCE = 0.135
-TURN_DURATION = 0.6  # seconds for approx 180 turn
+TURN_DURATION = 2  # seconds for approx 180 turn
 TICK = 0.1
 
 def sonar_callback(msg):
