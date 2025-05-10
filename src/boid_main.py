@@ -44,6 +44,12 @@ class MiRoClient:
     TRANSLATION_ONLY = False # Whether to rotate only
     IS_MIROCODE = False  # Set to True if running in MiRoCODE
 
+    # sonar settings
+    SAFE_DISTANCE = 0.135  # meters (adjust as needed)
+    TURNING_FACTOR = 2  # Adjust this value to control the turning speed
+    BASE_SPEED = 0.2  # Base speed for the robot
+    TURN_DURATION = 0.6  # seconds for approx 180 turn
+
     # formatting order
     PREPROCESSING_ORDER = ["edge", "smooth", "color", "gaussian"]
         # set to empty to not preprocess or add the methods in the order you want to implement.
@@ -182,108 +188,98 @@ class MiRoClient:
 
 
 
-    def look_for_ball(self):
+    def look_for_miro(self):
         """
-        [1 of 3] Rotate MiRo if it doesn't see a ball in its current
-        position, until it sees one.
+        [1 of 3] Roam forward, and bounce off obstacles by turning 180°.
         """
-        turning_counter = 0
-        turning_steps = 60  # ~1.2 seconds at 0.02s per tick
-        turn_dir = 1  # Can be randomised if you want later
-
-
-        if self.just_switched:  # Print once
-            print("MiRo is looking for the other Miro...")
+        if self.just_switched:
+            print("MiRo is looking for the other MiRo (bounce style)...")
             self.just_switched = False
-        for index in range(2):  # For each camera (0 = left, 1 = right)
-            # Skip if there's no new image, in case the network is choking
+
+        # Check each camera for another MiRo
+        for index in range(2):
             if not self.new_frame[index]:
                 continue
             image = self.input_camera[index]
-            # Run the detect MiRo procedure
             self.ball[index] = self.detect_miro(image, index)
-        # If no ball has been detected
+
         if not self.ball[0] and not self.ball[1]:
-            # self.drive(self.SLOW, -self.SLOW)
+            # No MiRo detected
             if self.sonar_distance is not None:
                 d = self.sonar_distance
-
-                if turning_counter > 0:
-                    rospy.logwarn(f"Turning sharply... {turning_counter} steps remaining")
-                    self.drive(speed_l=0.2 * turn_dir, speed_r=-0.2 * turn_dir)  # Sharper turn
-                    turning_counter -= 1
-
-                elif d < 0.135:
-                    rospy.logwarn(f"Obstacle too close ({d:.2f} m)! Initiating sharp turn.")
-                    turning_counter = turning_steps
-                    turn_dir = random.choice([-1, 1])  # Optional: random left or right
-                    self.drive(speed_l=0.2 * turn_dir, speed_r=-0.2 * turn_dir)
-
+                if d < self.SAFE_DISTANCE:
+                    rospy.logwarn(f"[BOUNCE] Obstacle too close ({d:.2f} m)! Turning 180°.")
+                    # Turn in place: full spin, then move forward again
+                    start_time = rospy.Time.now().to_sec()
+                    while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
+                        self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
+                        rospy.sleep(self.TICK)
+                    # After turning, move forward
+                    self.drive(speed_l=self.BASE_SPEED, speed_r=self.BASE_SPEED)
                 else:
-                    self.drive(speed_l=0.2, speed_r=0.2)  # Go straight
-
+                    # Nothing ahead, just move
+                    self.drive(speed_l=self.BASE_SPEED, speed_r=self.BASE_SPEED)
             else:
                 rospy.loginfo("Waiting for sonar data...")
         else:
-            self.status_code = 2  # Switch to the second action
+            # MiRo found!
+            self.status_code = 2
             self.just_switched = True
 
-    def lock_onto_ball(self, error=25):
+
+    def lock_onto_ball(self):
         """
-        [2 of 3] Once a ball has been detected, turn MiRo to face it
+        Combined: Align with target and move forward only if aligned & distance is safe.
         """
-        if self.just_switched:  # Print once
-            print("MiRo is locking on to the ball")
+        if self.just_switched:
+            print("MiRo is aligning and following the other MiRo...")
             self.just_switched = False
-        for index in range(2):  # For each camera (0 = left, 1 = right)
-            # Skip if there's no new image, in case the network is choking
+
+        for index in range(2):
             if not self.new_frame[index]:
                 continue
             image = self.input_camera[index]
-            # Run the detect ball procedure
             self.ball[index] = self.detect_miro(image, index)
-        # If only the right camera sees the ball, rotate clockwise
-        if not self.ball[0] and self.ball[1]:
-            self.drive(self.SLOW, -self.SLOW)
-        # Conversely, rotate counter-clockwise
-        elif self.ball[0] and not self.ball[1]:
-            self.drive(-self.SLOW, self.SLOW)
-        # Make the MiRo face the ball if it's visible with both cameras
-        elif self.ball[0] and self.ball[1]:
-            error = 0.05  # 5% of image width
-            # Use the normalised values
-            left_x = self.ball[0][0]  # should be in range [0.0, 0.5]
-            right_x = self.ball[1][0]  # should be in range [-0.5, 0.0]
-            rotation_speed = 0.03  # Turn even slower now
-            if abs(left_x) - abs(right_x) > error:
-                self.drive(rotation_speed, -rotation_speed)  # turn clockwise
-            elif abs(left_x) - abs(right_x) < -error:
-                self.drive(-rotation_speed, rotation_speed)  # turn counter-clockwise
-            else:
-                # Successfully turned to face the ball
-                self.status_code = 3  # Switch to the third action
-                self.just_switched = True
-                self.bookmark = self.counter
-        # Otherwise, the ball is lost :-(
-        else:
-            self.status_code = 0  # Go back to square 1...
-            print("MiRo has lost the ball...")
-            self.just_switched = True
 
-    # GOAAAL
-    def kick(self):
-        """
-        [3 of 3] Once MiRO is in position, this function should drive the MiRo
-        forward until it kicks the ball!
-        """
-        if self.just_switched:
-            print("MiRo is kicking the ball!")
-            self.just_switched = False
-        if self.counter <= self.bookmark + 2 / self.TICK and not self.TRANSLATION_ONLY:
-            self.drive(self.FAST, self.FAST)
-        else:
-            self.status_code = 0  # Back to the default state after the kick
+        # Lost target
+        if not self.ball[0] and not self.ball[1]:
+            print("Target lost. Re-entering search mode...")
+            self.status_code = 1
             self.just_switched = True
+            return
+
+        # Alignment logic
+        error_margin = 0.05
+        rotation_speed = 0.03
+
+        move_forward = False
+
+        if self.ball[0] and self.ball[1]:
+            left_x = self.ball[0][0]
+            right_x = self.ball[1][0]
+            diff = abs(left_x) - abs(right_x)
+
+            if diff > error_margin:
+                self.drive(rotation_speed, -rotation_speed)  # Clockwise
+            elif diff < -error_margin:
+                self.drive(-rotation_speed, rotation_speed)  # Counter-clockwise
+            else:
+                move_forward = True  # Aligned
+        elif self.ball[0]:
+            self.drive(-rotation_speed, rotation_speed)
+        elif self.ball[1]:
+            self.drive(rotation_speed, -rotation_speed)
+
+        # Once aligned, check sonar and follow if safe
+        if move_forward and self.sonar_distance is not None:
+            if self.sonar_distance > self.SAFE_DISTANCE:
+                speed = min(self.FAST, (self.sonar_distance - self.SAFE_DISTANCE) * 4.0)
+                self.drive(speed, speed)
+            else:
+                rospy.logwarn(f"[STOP] Too close to target: {self.sonar_distance:.2f} m")
+                self.drive(0.0, 0.0)
+
+
 
     def __init__(self):
         # Initialise a new ROS node to communicate with MiRo, if needed
@@ -359,15 +355,11 @@ class MiRoClient:
             if self.status_code == 1:
                 # Every once in a while, look for ball
                 if self.counter % self.CAM_FREQ == 0:
-                    self.look_for_ball()
+                    self.look_for_miro()
 
             # Step 2. Orient towards it
             elif self.status_code == 2:
                 self.lock_onto_ball()
-
-            # Step 3. Kick!
-            elif self.status_code == 3:
-                self.kick()
 
             # Fall back
             else:
