@@ -227,7 +227,7 @@ class MiRoClient:
             self.just_switched = True
 
 
-    def lock_onto_ball(self):
+    def lock_onto_miro(self):
         """
         Combined: Align with target and move forward only if aligned & distance is safe.
         """
@@ -359,7 +359,7 @@ class MiRoClient:
 
             # Step 2. Orient towards it
             elif self.status_code == 2:
-                self.lock_onto_ball()
+                self.lock_onto_miro()
 
             # Fall back
             else:
