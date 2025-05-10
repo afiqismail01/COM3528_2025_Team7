@@ -2,72 +2,41 @@
 import os
 import rospy
 from geometry_msgs.msg import TwistStamped
+from sensor_msgs.msg import JointState
 
-try:  # For convenience, import this util separately
-    from miro2.lib import wheel_speed2cmd_vel  # Python 3
-except ImportError:
-    from miro2.lib import wheel_speed2cmd_vel  # Python 2
-
-class MiroClient:
-    """
-    Controls MiRo movement using /control/cmd_vel topic.
-    """
-
-    ##########################
-    TICK = 0.02
-    IS_MIROCODE = False  # Set to True if running in MiRoCODE
-    ##########################
+class SimpleFollow:
+    TICK = 0.1
 
     def __init__(self):
-        # Initialise a new ROS node to communicate with MiRo
-        if not self.IS_MIROCODE:
-            rospy.init_node("circle_motion", anonymous=True)
+        rospy.init_node("simple_follow", anonymous=True)
+        self.miro_name = os.getenv("MIRO_ROBOT_NAME", "miro02")
+        topic_base_name = "/" + self.miro_name
 
-        # Create a publisher for MiRo's movement commands
-        miro_name = os.getenv("MIRO_ROBOT_NAME", "miro01")
-        topic_base_name = f"/{miro_name}/control/cmd_vel"
-        self.vel_pub = rospy.Publisher(topic_base_name, TwistStamped, queue_size=10)
+        self.vel_pub = rospy.Publisher(
+            topic_base_name + "/control/cmd_vel", TwistStamped, queue_size=0
+        )
 
-        # Give ROS time to start up properly
-        rospy.sleep(2.0)
+        self.target_vel = [0.0, 0.0]
+        self.target_name = "miro01"
+        rospy.Subscriber(
+            f"/{self.target_name}/control/cmd_vel", TwistStamped, self.target_vel_callback
+        )
 
-        # Move the head to the default pose
-        self.reset_head_pose()
+    def target_vel_callback(self, msg):
+        self.target_vel = [msg.twist.linear.x, msg.twist.angular.z]
 
-    def reset_head_pose(self):
-        """Resets MiRo's head position (optional)."""
-        pass  # Add head reset logic if needed
-
-    def drive(self, speed_l=0.1, speed_r=0.3):  
-        """
-        Moves MiRo in a **circular path** by setting different left & right wheel speeds.
-        """
-
-        # Prepare an empty velocity command message
+    def drive(self, linear, angular):
         msg_cmd_vel = TwistStamped()
-
-        # Convert wheel speeds (m/sec) to command velocity (linear & angular)
-        (dr, dtheta) = wheel_speed2cmd_vel([speed_l, speed_r])
-
-        # Update the message with calculated movement values
-        msg_cmd_vel.twist.linear.x = dr  # Forward speed
-        msg_cmd_vel.twist.angular.z = dtheta  # Turning speed
-
-        # Publish the message to MiRo
+        msg_cmd_vel.twist.linear.x = linear
+        msg_cmd_vel.twist.angular.z = angular
         self.vel_pub.publish(msg_cmd_vel)
 
     def loop(self):
-        """
-        Main control loop to continuously move MiRo in circles.
-        """
-        rospy.loginfo("MiRo moving in a circular motion...")
-        
-        rate = rospy.Rate(1 / self.TICK)  # Set loop rate
-        
-        while not rospy.core.is_shutdown():
-            self.drive(speed_l=0.1, speed_r=0.3)  # Adjust these values for different circular paths
+        rate = rospy.Rate(1 / self.TICK)
+        while not rospy.is_shutdown():
+            self.drive(self.target_vel[0], self.target_vel[1])
             rate.sleep()
 
 if __name__ == "__main__":
-    main = MiroClient()
-    main.loop()
+    client = SimpleFollow()
+    client.loop()
