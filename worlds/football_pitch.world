@@ -197,31 +197,31 @@
 		<include>
 			<name>miro01</name>
 			<uri>model://miro_model</uri>
-			<pose>-2 0.0 0.0 0 0 1.5</pose>
+			<pose>-2 -3.0 0.0 0 0 -1.5</pose>
 		</include>
 
 		<include>
 			<name>miro02</name>
 			<uri>model://miro_model</uri>
-			<pose>-1 0.0 0.0 0 0 1.5</pose>
+			<pose>-1 -1.5 0.0 0 0 0.5</pose>
 		</include>
 
 		<include>
 			<name>miro03</name>
 			<uri>model://miro_model</uri>
-			<pose>0 0.0 0.0 0 0 1.5</pose>
+			<pose>0 0.0 0.0 0 0 -1.0</pose>
 		</include>
 
 		<include>
 			<name>miro04</name>
 			<uri>model://miro_model</uri>
-			<pose>1 0.0 0.0 0 0 1.5</pose>
+			<pose>1 1.5 0.0 0 0 1.5</pose>
 		</include>
 
 		<include>
 			<name>miro05</name>
 			<uri>model://miro_model</uri>
-			<pose>2 0.0 0.0 0 0 1.5</pose>
+			<pose>2 3.0 0.0 0 0 0.0</pose>
 		</include>
 
 		<!-- Add a cylinder obstacle in front of miro01 -->
