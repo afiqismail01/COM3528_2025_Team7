@@ -20,6 +20,12 @@ class MiroClient:
     IS_MIROCODE = False  # Set to True if running in MiRoCODE
     ##########################
 
+    # sonar settings
+    SAFE_DISTANCE = 0.135  # meters (adjust as needed)
+    TURNING_FACTOR = 2  # Adjust this value to control the turning speed
+    BASE_SPEED = 0.2  # Base speed for the robot
+    TURN_DURATION = 0.4  # seconds for approx 180 turn
+
     def __init__(self):
         # Initialise a new ROS node to communicate with MiRo
         if not self.IS_MIROCODE:
@@ -70,23 +76,20 @@ class MiroClient:
         turn_dir = 1  # Can be randomised if you want later
 
         while not rospy.core.is_shutdown():
+            # Obstacle ahead?
             if self.sonar_distance is not None:
                 d = self.sonar_distance
-
-                if turning_counter > 0:
-                    rospy.logwarn(f"Turning sharply... {turning_counter} steps remaining")
-                    self.drive(speed_l=0.2 * turn_dir, speed_r=-0.2 * turn_dir)  # Sharper turn
-                    turning_counter -= 1
-
-                elif d < 0.135:
-                    rospy.logwarn(f"Obstacle too close ({d:.2f} m)! Initiating sharp turn.")
-                    turning_counter = turning_steps
-                    turn_dir = random.choice([-1, 1])  # Optional: random left or right
-                    self.drive(speed_l=0.2 * turn_dir, speed_r=-0.2 * turn_dir)
-
+                if d < self.SAFE_DISTANCE:
+                    rospy.logwarn(f"[WANDER] Obstacle too close ({d:.2f} m)! Turning.")
+                    # Turn in place randomly for TURN_DURATION
+                    turn_dir = random.choice([-1, 1])
+                    start_time = rospy.Time.now().to_sec()
+                    while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
+                        self.drive(speed_l=self.TURNING_FACTOR * turn_dir, speed_r=-self.TURNING_FACTOR * turn_dir)
+                        rospy.sleep(self.TICK)
                 else:
-                    self.drive(speed_l=0.2, speed_r=0.2)  # Go straight
-
+                    # Clear path – go forward
+                    self.drive(speed_l=self.BASE_SPEED, speed_r=self.BASE_SPEED)
             else:
                 rospy.loginfo("Waiting for sonar data...")
 
