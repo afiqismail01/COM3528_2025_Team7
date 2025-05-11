@@ -194,19 +194,6 @@
 		</model>
 
 		<!-- miros -->
-<<<<<<< Updated upstream
-		<include>
-			<name>miro03</name>
-			<uri>model://miro_model</uri>
-			<pose>0 0.2 0.05 0 0 0</pose>
-		</include>
-		
-		<include>
-			<name>miro02</name>
-			<uri>model://miro_model</uri>
-			<pose>-0.5 0.2 0.05 0 0 0</pose>
-=======
-
 		<include>
 			<name>miro01</name>
 			<uri>model://miro_model</uri>
@@ -217,15 +204,11 @@
 			<name>miro02</name>
 			<uri>model://miro_model</uri>
 			<pose>-1 0.0 0.0 0 0 1.5</pose>
->>>>>>> Stashed changes
 		</include>
 
 		<include>
-			<name>miro01</name>
+			<name>miro03</name>
 			<uri>model://miro_model</uri>
-<<<<<<< Updated upstream
-			<pose>0.5 0.2 0.05 0 0 0</pose>
-=======
 			<pose>0 0.0 0.0 0 0 1.5</pose>
 		</include>
 
@@ -239,13 +222,12 @@
 			<name>miro05</name>
 			<uri>model://miro_model</uri>
 			<pose>2 0.0 0.0 0 0 1.5</pose>
->>>>>>> Stashed changes
 		</include>
 
 		<!-- Add a cylinder obstacle in front of miro01 -->
-		<model name="cylinder_obstacle">
+		<model name="cylinder_obstacle_1">
   		  <static>true</static>
-  		  <pose>1.0 0.2 0.15 0 0 0</pose> <!-- x y z roll pitch yaw -->
+  		  <pose>2.0 2.0 0.15 0 0 0</pose> <!-- x y z roll pitch yaw -->
   		  <link name="link">
     		<visual name="visual">
       		  <geometry>
@@ -269,6 +251,90 @@
     		</collision>
   		  </link>
 		</model>
+
+		<model name="cylinder_obstacle_2">
+  		  <static>true</static>
+  		  <pose>2.0 -2.0 0.15 0 0 0</pose> <!-- x y z roll pitch yaw -->
+  		  <link name="link">
+    		<visual name="visual">
+      		  <geometry>
+        		<cylinder>
+          		  <radius>0.1</radius>
+          		  <length>0.3</length>
+        		</cylinder>
+      		  </geometry>
+      		  <material>
+        		<ambient>0.2 0.2 0.8 1</ambient>
+        		<diffuse>0.2 0.2 0.8 1</diffuse>
+      		  </material>
+			</visual>
+    		<collision name="collision">
+      		  <geometry>
+        		<cylinder>
+          		  <radius>0.1</radius>
+          		  <length>0.3</length>
+        		</cylinder>
+      		  </geometry>
+    		</collision>
+  		  </link>
+		</model>
+
+		<model name="cylinder_obstacle_3">
+  		  <static>true</static>
+  		  <pose>-2.0 2.0 0.15 0 0 0</pose> <!-- x y z roll pitch yaw -->
+  		  <link name="link">
+    		<visual name="visual">
+      		  <geometry>
+        		<cylinder>
+          		  <radius>0.1</radius>
+          		  <length>0.3</length>
+        		</cylinder>
+      		  </geometry>
+      		  <material>
+        		<ambient>0.2 0.2 0.8 1</ambient>
+        		<diffuse>0.2 0.2 0.8 1</diffuse>
+      		  </material>
+			</visual>
+    		<collision name="collision">
+      		  <geometry>
+        		<cylinder>
+          		  <radius>0.1</radius>
+          		  <length>0.3</length>
+        		</cylinder>
+      		  </geometry>
+    		</collision>
+  		  </link>
+		</model>
+
+		<model name="cylinder_obstacle_4">
+  		  <static>true</static>
+  		  <pose>-2.0 -2.0 0.15 0 0 0</pose> <!-- x y z roll pitch yaw -->
+  		  <link name="link">
+    		<visual name="visual">
+      		  <geometry>
+        		<cylinder>
+          		  <radius>0.1</radius>
+          		  <length>0.3</length>
+        		</cylinder>
+      		  </geometry>
+      		  <material>
+        		<ambient>0.2 0.2 0.8 1</ambient>
+        		<diffuse>0.2 0.2 0.8 1</diffuse>
+      		  </material>
+			</visual>
+    		<collision name="collision">
+      		  <geometry>
+        		<cylinder>
+          		  <radius>0.1</radius>
+          		  <length>0.3</length>
+        		</cylinder>
+      		  </geometry>
+    		</collision>
+  		  </link>
+		</model>
+
+
+
 
 
 		<gravity>0 0 -9.8</gravity>
