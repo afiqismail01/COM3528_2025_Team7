@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-This script makes MiRo look for a blue ball and kick it
+This script makes MiRo look for a blue ball and follow it
 
 The code was tested for Python 2 and 3
 For Python 2 you might need to change the shebang line to
@@ -39,16 +39,19 @@ class MiRoClient:
     TICK = 0.02  # This is the update interval for the main control loop in secs
     CAM_FREQ = 1  # Number of ticks before camera gets a new frame, increase in case of network lag
     SLOW = 0.1  # Radial speed when turning on the spot (rad/s)
-    FAST = 0.4  # Linear speed when kicking the ball (m/s)
+    FAST = 0.3  # Linear speed when following the ball (m/s)
     DEBUG = False # Set to True to enable debug views of the cameras
     TRANSLATION_ONLY = False # Whether to rotate only
     IS_MIROCODE = False  # Set to True if running in MiRoCODE
 
-    # sonar settings
+    # settings
     SAFE_DISTANCE = 0.135  # meters (adjust as needed)
     TURNING_FACTOR = 2  # Adjust this value to control the turning speed
     BASE_SPEED = 0.2  # Base speed for the robot
     TURN_DURATION = 0.6  # seconds for approx 180 turn
+    FOLLOW_STOP_LIMIT = 70  # Number of frames before triggering escape
+    FACE_DETECTION_COOLDOWN = 4.0  # seconds to ignore face detection
+    ALIGNMENT_TIMEOUT = 4.0  # seconds to wait for alignment before switching to follow mode
 
     # formatting order
     PREPROCESSING_ORDER = ["edge", "smooth", "color", "gaussian"]
@@ -175,7 +178,7 @@ class MiRoClient:
         if debug:
             cv2.drawContours(frame_rgb, [largest], -1, (0, 255, 0), 2)
             cv2.circle(frame_rgb, (cx, cy), 5, (0, 0, 255), -1)
-            cv2.imshow("White Body Detection", frame_rgb)
+            # cv2.imshow("White Body Detection", frame_rgb)
             cv2.waitKey(1)
 
         # Normalize
@@ -287,6 +290,7 @@ class MiRoClient:
         if self.just_switched:
             print("MiRo is aligning and following the other MiRo...")
             self.just_switched = False
+            self.align_start_time = rospy.Time.now().to_sec()  # Start timing
 
         for index in range(2):
             if not self.new_frame[index]:
@@ -298,6 +302,13 @@ class MiRoClient:
         if not self.target_miro[0] and not self.target_miro[1]:
             print("Target lost. Re-entering search mode...")
             self.status_code = 1
+            self.just_switched = True
+            return
+        
+        # Alignment timeout escape
+        if rospy.Time.now().to_sec() - self.align_start_time > self.ALIGNMENT_TIMEOUT:
+            print("[ALIGNMENT TIMEOUT] Giving up and switching to follow mode.")
+            self.status_code = 3
             self.just_switched = True
             return
 
@@ -324,16 +335,16 @@ class MiRoClient:
         elif self.target_miro[1]:
             self.drive(rotation_speed, -rotation_speed)
 
-    def kick(self):
+    def follow(self):
         """
-        [3 of 3] MiRo moves forward for 1 second to simulate a 'kick',
+        [3 of 3] MiRo moves forward for 1 second to simulate a 'follow',
         unless it's too close to an obstacle or a face is detected.
-        If a face is detected, MiRo turns 180° instead of kicking.
+        If a face is detected, MiRo turns 180° instead of following.
         """
         if self.just_switched:
-            print("MiRo is kicking the ball!")
+            print("MiRo is following the other miro!")
             self.just_switched = False
-            self.kick_end_time = rospy.Time.now().to_sec() + 2.0  # 1 second from now
+            self.follow_end_time = rospy.Time.now().to_sec() + 1.0  # 1 second from now
             return
 
         # Check for face detection
@@ -343,8 +354,8 @@ class MiRoClient:
             for index in range(2):
                 if self.new_frame[index]:
                     image = self.input_camera[index]
-                    if self.detect_face_strict(image, debug=True):
-                        rospy.loginfo("[FACE DETECTED] Turning 180° instead of kicking.")
+                    if self.detect_face_strict(image, debug=False):
+                        rospy.loginfo("[FACE DETECTED] Turning 180° instead of following.")
                         self.last_face_detect_time = now  # prevent immediate retriggers
                         start_time = rospy.Time.now().to_sec()
                         while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
@@ -352,12 +363,12 @@ class MiRoClient:
                             rospy.sleep(self.TICK)
                         self.status_code = 0
                         self.just_switched = True
-                        self.kick_stop_counter = 0
+                        self.follow_stop_counter = 0
                         return
 
 
-        # Proceed with kicking if no face is detected
-        if rospy.Time.now().to_sec() < self.kick_end_time:
+        # Proceed with following if no face is detected
+        if rospy.Time.now().to_sec() < self.follow_end_time:
             # --- Combined proximity check ---
             visual_close = False
             for i in range(2):
@@ -368,22 +379,23 @@ class MiRoClient:
             sonar_close = self.sonar_distance is not None and self.sonar_distance < self.SAFE_DISTANCE
 
             if visual_close or sonar_close:
-                rospy.loginfo("[KICK STOP] Too close! (Visual: %s, Sonar: %.3f m)", visual_close, self.sonar_distance or -1)
+                # rospy.loginfo("[FOLLOW STOP] Too close! (Visual: %s, Sonar: %.3f m)", visual_close, self.sonar_distance or -1)
+                rospy.loginfo("[FOLLOW STOP] Too close!")
                 self.drive(0.0, 0.0)
-                self.kick_stop_counter += 1
+                self.follow_stop_counter += 1
             else:
-                self.drive(self.BASE_SPEED, self.BASE_SPEED)
-                self.kick_stop_counter = 0
+                self.drive(self.FAST, self.FAST)  # Move forward with a bit more speed
+                self.follow_stop_counter = 0
 
-            if self.kick_stop_counter >= self.kick_stop_limit:
-                rospy.loginfo("[ESCAPE] Too many KICK STOPs, turning 180° to reset.")
+            if self.follow_stop_counter >= self.follow_stop_limit:
+                rospy.loginfo("[ESCAPE] Too many FOLLOW STOPs, turning 180° to reset.")
                 start_time = rospy.Time.now().to_sec()
                 while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
                     self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
                     rospy.sleep(self.TICK)
                 self.status_code = 0
                 self.just_switched = True
-                self.kick_stop_counter = 0
+                self.follow_stop_counter = 0
         else:
             self.status_code = 0
             self.just_switched = True
@@ -442,12 +454,12 @@ class MiRoClient:
         # Move the head to default pose
         self.reset_head_pose()
 
-        # Initialise the 'kick' escape threshold
-        self.kick_stop_counter = 0
-        self.kick_stop_limit = 50  # Frames before triggering escape
+        # Initialise the 'follow' escape threshold
+        self.follow_stop_counter = 0
+        self.follow_stop_limit = self.FOLLOW_STOP_LIMIT  # Frames before triggering escape
 
         self.last_face_detect_time = 0
-        self.face_cooldown = 5.0  # seconds to ignore face detection
+        self.face_cooldown = self.FACE_DETECTION_COOLDOWN  # seconds to ignore face detection
 
     def sonar_callback(self, msg):
         self.sonar_distance = msg.range
@@ -462,10 +474,11 @@ class MiRoClient:
         # Main control loop iteration counter
         self.counter = 0
         # This switch loops through MiRo behaviours:
-        # Find ball, lock on to the ball and kick ball
+        # Find ball, lock on to the ball and follow ball
         self.status_code = 0
         while not rospy.core.is_shutdown():
-            # Step 1. Find ball
+            self.status_code = 1
+            # Step 1. Find target MiRo
             if self.status_code == 1:
                 # Every once in a while, look for ball
                 if self.counter % self.CAM_FREQ == 0:
@@ -475,9 +488,9 @@ class MiRoClient:
             elif self.status_code == 2:
                 self.lock_onto_miro()
 
-            # Step 3. Kick!
+            # Step 3. Follow!
             elif self.status_code == 3:
-                self.kick()
+                self.follow()
 
             # Fall back
             else:
