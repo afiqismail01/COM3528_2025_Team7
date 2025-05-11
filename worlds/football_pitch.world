@@ -194,6 +194,7 @@
 		</model>
 
 		<!-- miros -->
+<<<<<<< Updated upstream
 		<include>
 			<name>miro03</name>
 			<uri>model://miro_model</uri>
@@ -204,12 +205,41 @@
 			<name>miro02</name>
 			<uri>model://miro_model</uri>
 			<pose>-0.5 0.2 0.05 0 0 0</pose>
+=======
+
+		<include>
+			<name>miro01</name>
+			<uri>model://miro_model</uri>
+			<pose>-2 0.0 0.0 0 0 1.5</pose>
+		</include>
+
+		<include>
+			<name>miro02</name>
+			<uri>model://miro_model</uri>
+			<pose>-1 0.0 0.0 0 0 1.5</pose>
+>>>>>>> Stashed changes
 		</include>
 
 		<include>
 			<name>miro01</name>
 			<uri>model://miro_model</uri>
+<<<<<<< Updated upstream
 			<pose>0.5 0.2 0.05 0 0 0</pose>
+=======
+			<pose>0 0.0 0.0 0 0 1.5</pose>
+		</include>
+
+		<include>
+			<name>miro04</name>
+			<uri>model://miro_model</uri>
+			<pose>1 0.0 0.0 0 0 1.5</pose>
+		</include>
+
+		<include>
+			<name>miro05</name>
+			<uri>model://miro_model</uri>
+			<pose>2 0.0 0.0 0 0 1.5</pose>
+>>>>>>> Stashed changes
 		</include>
 
 		<!-- Add a cylinder obstacle in front of miro01 -->
