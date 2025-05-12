@@ -477,7 +477,6 @@ class MiRoClient:
         # Find ball, lock on to the ball and follow ball
         self.status_code = 0
         while not rospy.core.is_shutdown():
-            self.status_code = 1
             # Step 1. Find target MiRo
             if self.status_code == 1:
                 # Every once in a while, look for ball
