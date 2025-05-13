@@ -38,13 +38,9 @@ class MiRoClient:
     ##########################
     TICK = 0.02  # This is the update interval for the main control loop in secs
     CAM_FREQ = 1  # Number of ticks before camera gets a new frame, increase in case of network lag
-    SLOW = 0.1  # Radial speed when turning on the spot (rad/s)
     FAST = 0.3  # Linear speed when following the ball (m/s)
     DEBUG = False # Set to True to enable debug views of the cameras
-    TRANSLATION_ONLY = False # Whether to rotate only
     IS_MIROCODE = False  # Set to True if running in MiRoCODE
-
-    # settings
     SAFE_DISTANCE = 0.135  # meters (adjust as needed)
     TURNING_FACTOR = 2  # Adjust this value to control the turning speed
     BASE_SPEED = 0.2  # Base speed for the robot
@@ -52,56 +48,11 @@ class MiRoClient:
     FOLLOW_STOP_LIMIT = 70  # Number of frames before triggering escape
     FACE_DETECTION_COOLDOWN = 4.0  # seconds to ignore face detection
     ALIGNMENT_TIMEOUT = 4.0  # seconds to wait for alignment before switching to follow mode
-
-    # formatting order
-    PREPROCESSING_ORDER = ["edge", "smooth", "color", "gaussian"]
-        # set to empty to not preprocess or add the methods in the order you want to implement.
-        # "edge" to use edge detection, "gaussian" to use difference gaussian
-        # "color" to use color segmentation, "smooth" to use smooth blurring,
-
-    # color segmentation format
-    HSV = True  # if true select a color which will convert to hsv format with a range of its own, else you can select your own rgb range
-    f = lambda x: int(0) if (x < 0) else (int(255) if x > 255 else int(x))
-    COLOR_HSV = [f(255), f(0), f(0)]     # target color which will be converted to hsv for processing, format BGR
-    COLOR_LOW = (f(180), f(0), f(0))         # low color segment, format BGR
-    COLOR_HIGH = (f(255), f(255), f(255))  # high color segment, format BGR
-
-    # edge detection format
-    INTENSITY_LOW = 50   # min 0, max 500
-    INTENSITY_HIGH = 50  # min 0, max 500
-
-    # smoothing_blurring
-    GAUSSIAN_BLURRING = False
-    KERNEL_SIZE = 15         # min 3, max 15
-    STANDARD_DEVIATION = 0  # min 0.1, max 4.9
-
-    # difference gaussian
-    DIFFERENCE_SD_LOW = 1.5 # min 0.00, max 1.40
-    DIFFERENCE_SD_HIGH = 0 # min 0.00, max 1.40
     ##########################
     """
     End of script settings
     """
 
-    def reset_head_pose(self):
-        """
-        Reset MiRo head to default position, to avoid having to deal with tilted frames
-        """
-        self.kin_joints = JointState()  # Prepare the empty message
-        self.kin_joints.name = ["tilt", "lift", "yaw", "pitch"]
-        self.kin_joints.position = [0.0, radians(34.0), 0.0, 0.0]
-        t = 0
-        while not rospy.core.is_shutdown():  # Check ROS is running
-            # Publish state to neck servos for 1 sec
-            self.pub_kin.publish(self.kin_joints)
-            rospy.sleep(self.TICK)
-            t += self.TICK
-            if t > 1:
-                break
-        self.INTENSITY_CHECK = lambda x: int(0) if (x < 0) else (int(500) if x > 500 else int(x))
-        self.KERNEL_SIZE_CHECK = lambda x: int(3) if (x < 3) else (int(15) if x > 15 else int(x))
-        self.STANDARD_DEVIATION_PROCESS = lambda x: 0.1 if (x < 0.1) else (4.9 if x > 4.9 else round(x, 1))
-        self.DIFFERENCE_CHECK = lambda x: 0.01 if (x < 0.01) else (1.40 if x > 1.40 else round(x,2))
 
     def drive(self, speed_l=0.1, speed_r=0.1):  # (m/sec, m/sec)
         """
