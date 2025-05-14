@@ -42,7 +42,7 @@ All created development python codes should be placed in `src` directory.
 2. Start ROS launcher to see the Boid Algorithm simulation using 5 MiRos:
 
     ```bash
-    roslaunch com3528_2025_team7 sim_football.launch
+    roslaunch com3528_2025_team7 main.launch
     ```
 
 ## Optional Development Helper
