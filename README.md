@@ -33,7 +33,7 @@ The project uses Boid Algorithm to simulate emergent group behaviour by layering
 ## Usage
 All created development python codes should be placed in `src` directory.
 
-1. Make the boid_main_v3 script in the `src` folder executable:
+1. Make the `boid_main_v3` script in the `src` folder executable:
 
     ```bash
     chmod +x ~/catkin_ws/src/com3528_2025_team7/src/boid_main_v3.py
