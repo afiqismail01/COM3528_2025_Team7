@@ -1,13 +1,14 @@
-# com3528_2025_team7
+# COM3528_2025_Team7
 
-Basic setup for MiRo project.
+**Emergent Swarm Intelligence in Decentralized MiRo Agents**
+The project uses Boid Algorithm to simulate emergent group behaviour by layering Separation, Alignment, and Cohesion principles. The outcome of the simulation will form a group of MiRo moving in a same direction with no central control.
 
 ## Table of Contents
 
 - [Setup](#setup)
 - [Usage](#usage)
 
-## Setup
+## Simulation Setup
 
 1. Clone the project repository into ROS workspace:
 
@@ -32,19 +33,19 @@ Basic setup for MiRo project.
 ## Usage
 All created development python codes should be placed in `src` directory.
 
-1. Make the script in the `src` folder executable:
+1. Make the `boid_main_v3` script in the `src` folder executable:
 
     ```bash
-    chmod +x ~/catkin_ws/src/com3528_2025_team7/src/<script_name>.py
+    chmod +x ~/catkin_ws/src/com3528_2025_team7/src/boid_main_v3.py
     ```
 
-2. Start ROS:
+2. Start ROS launcher to see the Boid Algorithm simulation using 5 MiRos:
 
     ```bash
-    roslaunch com3528_2025_team7 main.launch
+    roslaunch com3528_2025_team7 sim_football.launch
     ```
 
-## Development Helper
+## Optional Development Helper
 
 1. Target MiRo before running `rosrun` command for assigning the code to a particular MiRo
 
@@ -56,6 +57,6 @@ All created development python codes should be placed in `src` directory.
 2. Rosrun:
 
     ```bash
-    rosrun com3528_2025_team7 <script_name>.py
+    rosrun com3528_2025_team7 boid_main_v3.py
 
     ```
