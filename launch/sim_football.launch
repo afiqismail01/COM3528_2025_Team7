@@ -28,22 +28,22 @@
 
   <!-- MiRo 01 -->
   <env name="MIRO_ROBOT_NAME" value="miro01" />
-  <!-- <node ns="miro01" name="boid_01" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" /> -->
+  <node ns="miro01" name="boid_01" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" />
 
   <!-- MiRo 02 -->
   <env name="MIRO_ROBOT_NAME" value="miro02" />
-  <!-- <node ns="miro02" name="boid_02" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" /> -->
+  <node ns="miro02" name="boid_02" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" />
 
   <!-- MiRo 03 -->
   <env name="MIRO_ROBOT_NAME" value="miro03" />
-  <!-- <node ns="miro03" name="boid_03" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" /> -->
+  <node ns="miro03" name="boid_03" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" />
 
   <!-- MiRo 04 -->
   <env name="MIRO_ROBOT_NAME" value="miro04" />
-  <!-- <node ns="miro04" name="boid_04" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" /> -->
+  <node ns="miro04" name="boid_04" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" />
 
   <!-- MiRo 05 -->
   <env name="MIRO_ROBOT_NAME" value="miro05" />
-  <!-- <node ns="miro05" name="boid_05" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" /> -->
+  <node ns="miro05" name="boid_05" pkg="com3528_2025_team7" type="boid_main_v3.py" output="screen" />
 
 </launch>
