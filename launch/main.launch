@@ -7,7 +7,7 @@
   <env name="GAZEBO_PLUGIN_PATH" value="$(optenv MIRO_DIR_MDK)/bin/${MIRO_SYSTEM}:$(optenv GAZEBO_PLUGIN_PATH)" />
 
   <!-- Load the pitch world -->
-  <arg name="world" default="$(find com3528_2025_team7)/worlds/football_pitch.world"/>
+  <arg name="world" default="$(find com3528_2025_team7)/worlds/main.world"/>
 
   <!-- Optional headless argument -->
   <arg name="headless" default="false" />
