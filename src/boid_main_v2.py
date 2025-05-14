@@ -715,7 +715,7 @@ class MiRoClient:
             self.counter += 1
             rospy.sleep(self.TICK)
 
-            # new code for logging
+            # new code for logging 
             self.log_cohesion_metric()
 
 
