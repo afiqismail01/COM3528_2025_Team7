@@ -18,6 +18,14 @@ import numpy as np  # Numerical Analysis library
 import cv2  # Computer Vision library
 
 import rospy  # ROS Python interface
+
+# NEW CODE 
+from geometry_msgs.msg import Pose2D  # Used for broadcasting agent state
+from gazebo_msgs.msg import ModelStates
+from geometry_msgs.msg import TwistStamped
+import csv
+from datetime import datetime
+
 from sensor_msgs.msg import CompressedImage  # ROS CompressedImage message
 from sensor_msgs.msg import JointState  # ROS joints state message
 from cv_bridge import CvBridge, CvBridgeError  # ROS -> OpenCV converter
@@ -38,9 +46,13 @@ class MiRoClient:
     ##########################
     TICK = 0.02  # This is the update interval for the main control loop in secs
     CAM_FREQ = 1  # Number of ticks before camera gets a new frame, increase in case of network lag
+    SLOW = 0.1  # Radial speed when turning on the spot (rad/s)
     FAST = 0.3  # Linear speed when following the ball (m/s)
     DEBUG = False # Set to True to enable debug views of the cameras
+    TRANSLATION_ONLY = False # Whether to rotate only
     IS_MIROCODE = False  # Set to True if running in MiRoCODE
+
+    # settings
     SAFE_DISTANCE = 0.135  # meters (adjust as needed)
     TURNING_FACTOR = 2  # Adjust this value to control the turning speed
     BASE_SPEED = 0.2  # Base speed for the robot
@@ -48,11 +60,56 @@ class MiRoClient:
     FOLLOW_STOP_LIMIT = 70  # Number of frames before triggering escape
     FACE_DETECTION_COOLDOWN = 4.0  # seconds to ignore face detection
     ALIGNMENT_TIMEOUT = 4.0  # seconds to wait for alignment before switching to follow mode
+
+    # formatting order
+    PREPROCESSING_ORDER = ["edge", "smooth", "color", "gaussian"]
+        # set to empty to not preprocess or add the methods in the order you want to implement.
+        # "edge" to use edge detection, "gaussian" to use difference gaussian
+        # "color" to use color segmentation, "smooth" to use smooth blurring,
+
+    # color segmentation format
+    HSV = True  # if true select a color which will convert to hsv format with a range of its own, else you can select your own rgb range
+    f = lambda x: int(0) if (x < 0) else (int(255) if x > 255 else int(x))
+    COLOR_HSV = [f(255), f(0), f(0)]     # target color which will be converted to hsv for processing, format BGR
+    COLOR_LOW = (f(180), f(0), f(0))         # low color segment, format BGR
+    COLOR_HIGH = (f(255), f(255), f(255))  # high color segment, format BGR
+
+    # edge detection format
+    INTENSITY_LOW = 50   # min 0, max 500
+    INTENSITY_HIGH = 50  # min 0, max 500
+
+    # smoothing_blurring
+    GAUSSIAN_BLURRING = False
+    KERNEL_SIZE = 15         # min 3, max 15
+    STANDARD_DEVIATION = 0  # min 0.1, max 4.9
+
+    # difference gaussian
+    DIFFERENCE_SD_LOW = 1.5 # min 0.00, max 1.40
+    DIFFERENCE_SD_HIGH = 0 # min 0.00, max 1.40
     ##########################
     """
     End of script settings
     """
 
+    def reset_head_pose(self):
+        """
+        Reset MiRo head to default position, to avoid having to deal with tilted frames
+        """
+        self.kin_joints = JointState()  # Prepare the empty message
+        self.kin_joints.name = ["tilt", "lift", "yaw", "pitch"]
+        self.kin_joints.position = [0.0, radians(34.0), 0.0, 0.0]
+        t = 0
+        while not rospy.core.is_shutdown():  # Check ROS is running
+            # Publish state to neck servos for 1 sec
+            self.pub_kin.publish(self.kin_joints)
+            rospy.sleep(self.TICK)
+            t += self.TICK
+            if t > 1:
+                break
+        self.INTENSITY_CHECK = lambda x: int(0) if (x < 0) else (int(500) if x > 500 else int(x))
+        self.KERNEL_SIZE_CHECK = lambda x: int(3) if (x < 3) else (int(15) if x > 15 else int(x))
+        self.STANDARD_DEVIATION_PROCESS = lambda x: 0.1 if (x < 0.1) else (4.9 if x > 4.9 else round(x, 1))
+        self.DIFFERENCE_CHECK = lambda x: 0.01 if (x < 0.01) else (1.40 if x > 1.40 else round(x,2))
 
     def drive(self, speed_l=0.1, speed_r=0.1):  # (m/sec, m/sec)
         """
@@ -87,7 +144,7 @@ class MiRoClient:
         # Silently(-ish) handle corrupted JPEG frames
         try:
             # Convert compressed ROS image to raw CV image
-            image = self.image_converter.compressed_imgmsg_to_cv2(ros_image, "rgb8")
+            image = self.image_converter.compressed_imgmsg_to_cv2(ros_image, "bgr8")
             # Convert from OpenCV's default BGR to RGB
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             # Store image as class attribute for further use
@@ -139,6 +196,17 @@ class MiRoClient:
         norm_r = radius / w
 
         return [norm_x, norm_y, norm_r]
+    
+    def detect_blue_obstacle(self, frame_rgb, area_threshold=40000):
+        if frame_rgb is None:
+            return False
+        hsv = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2HSV)
+
+        lower_blue = np.array([100, 100, 50])
+        upper_blue = np.array([140, 255, 255])
+        mask = cv2.inRange(hsv, lower_blue, upper_blue)
+        blue_pixels = np.sum(mask > 0)
+        return blue_pixels > area_threshold
 
 
     def detect_face_strict(self, image, debug=False):
@@ -200,7 +268,7 @@ class MiRoClient:
         [1 of 3] Roam forward, and bounce off obstacles by turning 180°.
         """
         if self.just_switched:
-            print("MiRo is looking for the other MiRo...")
+            print("MiRo is looking for the other MiRo... " + str(self.robot_name))
             self.just_switched = False
 
         # Check each camera for another MiRo
@@ -212,34 +280,39 @@ class MiRoClient:
 
         if not self.target_miro[0] and not self.target_miro[1]:
             # No MiRo detected
-            if self.sonar_distance is not None:
-                d = self.sonar_distance
-                if d < self.SAFE_DISTANCE:
-                    rospy.loginfo(f"[BOUNCE] Obstacle too close.")
-                    # Turn in place: full spin, then move forward again
-                    start_time = rospy.Time.now().to_sec()
-                    while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
-                        self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
-                        rospy.sleep(self.TICK)
-                    # After turning, move forward
-                    self.drive(speed_l=self.BASE_SPEED, speed_r=self.BASE_SPEED)
-                else:
-                    # Nothing ahead, just move
-                    self.drive(speed_l=self.BASE_SPEED, speed_r=self.BASE_SPEED)
+            obstacle_detected = False
+            if any(self.detect_blue_obstacle(img) for img in self.input_camera if img is not None):
+                obstacle_detected = True
+                rospy.loginfo(f" [{self.robot_name}] [VISION AVOID] Blue obstacle detected.")
+            elif self.sonar_distance is not None and self.sonar_distance < self.SAFE_DISTANCE:
+                obstacle_detected = True
+                rospy.loginfo(f" [{self.robot_name}][BOUNCE] Obstacle too close (sonar).")
+            if obstacle_detected:
+                # Turn in place: full spin, then move forward again
+                start_time = rospy.Time.now().to_sec()
+                while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION / 2 and not rospy.core.is_shutdown():
+                    self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
+                    rospy.sleep(self.TICK)
+                # After turning, move forward
+                self.drive(speed_l=self.BASE_SPEED, speed_r=self.BASE_SPEED)
             else:
-                rospy.loginfo("Waiting for sonar data...")
+                # Nothing ahead, just move
+                self.drive(speed_l=self.BASE_SPEED, speed_r=self.BASE_SPEED)
         else:
             # MiRo found!
             self.status_code = 2
             self.just_switched = True
 
+        # NEW CODE 
+        # Apply flocking even if no MiRo seen
+        self.apply_boid_behavior()
 
     def lock_onto_miro(self):
         """
         Combined: Align with target and move forward only if aligned & distance is safe.
         """
         if self.just_switched:
-            print("MiRo is aligning and following the other MiRo...")
+            print("MiRo is aligning and following the other MiRo... " + str(self.robot_name))
             self.just_switched = False
             self.align_start_time = rospy.Time.now().to_sec()  # Start timing
 
@@ -251,14 +324,14 @@ class MiRoClient:
 
         # Lost target
         if not self.target_miro[0] and not self.target_miro[1]:
-            print("Target lost. Re-entering search mode...")
+            print("Target lost. Re-entering search mode... " + str(self.robot_name))
             self.status_code = 1
             self.just_switched = True
             return
         
         # Alignment timeout escape
         if rospy.Time.now().to_sec() - self.align_start_time > self.ALIGNMENT_TIMEOUT:
-            print("[ALIGNMENT TIMEOUT] Giving up and switching to follow mode.")
+            print("[ALIGNMENT TIMEOUT] Giving up and switching to follow mode. " + str(self.robot_name))
             self.status_code = 3
             self.just_switched = True
             return
@@ -292,8 +365,9 @@ class MiRoClient:
         unless it's too close to an obstacle or a face is detected.
         If a face is detected, MiRo turns 180° instead of following.
         """
+
         if self.just_switched:
-            print("MiRo is following the other miro!")
+            print("MiRo is following the other miro! " + str(self.robot_name))
             self.just_switched = False
             self.follow_end_time = rospy.Time.now().to_sec() + 1.0  # 1 second from now
             return
@@ -306,7 +380,7 @@ class MiRoClient:
                 if self.new_frame[index]:
                     image = self.input_camera[index]
                     if self.detect_face_strict(image, debug=False):
-                        rospy.loginfo("[FACE DETECTED] Turning 180° instead of following.")
+                        rospy.loginfo(f" [{self.robot_name}] [FACE DETECTED] Turning 180° instead of following.")
                         self.last_face_detect_time = now  # prevent immediate retriggers
                         start_time = rospy.Time.now().to_sec()
                         while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
@@ -331,7 +405,7 @@ class MiRoClient:
 
             if visual_close or sonar_close:
                 # rospy.loginfo("[FOLLOW STOP] Too close! (Visual: %s, Sonar: %.3f m)", visual_close, self.sonar_distance or -1)
-                rospy.loginfo("[FOLLOW STOP] Too close!")
+                rospy.loginfo(f" [{self.robot_name}] [FOLLOW STOP] Too close!")
                 self.drive(0.0, 0.0)
                 self.follow_stop_counter += 1
             else:
@@ -339,7 +413,7 @@ class MiRoClient:
                 self.follow_stop_counter = 0
 
             if self.follow_stop_counter >= self.follow_stop_limit:
-                rospy.loginfo("[ESCAPE] Too many FOLLOW STOPs, turning 180° to reset.")
+                rospy.loginfo(f" [{self.robot_name}] [ESCAPE] Too many FOLLOW STOPs, turning 180° to reset.")
                 start_time = rospy.Time.now().to_sec()
                 while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
                     self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
@@ -351,8 +425,17 @@ class MiRoClient:
             self.status_code = 0
             self.just_switched = True
 
+    # NEW CODE 
+    # def __init__(self):
+    def __init__(self, miro_id='miro_1'):
 
-    def __init__(self):
+        # NEW CODE
+        self.miro_id = miro_id
+        self.robot_name = os.getenv("MIRO_ROBOT_NAME", "miro01")
+        print ("*************   __init__ function - " + str(self.robot_name))
+        # topic_base = "/" + self.robot_name
+
+
         # Initialise a new ROS node to communicate with MiRo, if needed
         if not self.IS_MIROCODE:
             rospy.init_node("boid_main", anonymous=True)
@@ -412,22 +495,204 @@ class MiRoClient:
         self.last_face_detect_time = 0
         self.face_cooldown = self.FACE_DETECTION_COOLDOWN  # seconds to ignore face detection
 
+        # NEW CODE
+        # Boid-related
+        self.pose = Pose2D()
+        self.neighbors = []
+        self.last_positions = {}
+        self.boid_weight_sep = 1.5
+        self.boid_weight_align = 1.0
+        self.boid_weight_coh = 1.0
+        self.boid_range = 1.0  # meters
+        self.last_velocities = {}
+        self.prev_position = None
+        self.prev_time = None
+
+        # ROS state pub/sub
+        # self.state_pub = rospy.Publisher(
+        #     f"{topic_base_name}/state", Pose2D, queue_size=1
+        # )
+
+        self.state_pub = rospy.Publisher(f"/{self.robot_name}/state", Pose2D, queue_size=1)
+        for i in range(1, 6):  # assuming 5 agents: miro01 to miro05
+            other = f"miro0{i}"
+            if other != self.robot_name:
+                rospy.Subscriber(f"/{other}/state", Pose2D, self.make_receive_neighbor_state(other))
+
+        # rospy.Subscriber("/all_miro_states", Pose2D, self.receive_neighbor_state)
+
+        rospy.Subscriber("/gazebo/model_states", ModelStates, self.model_state_callback)
+
+        self.velocity_pub = rospy.Publisher(f"/{self.robot_name}/velocity", TwistStamped, queue_size=1)
+
+        # for logging
+        self.cohesion_log_file = f"/tmp/{self.robot_name}_cohesion_log.csv"
+        self.log_file_handle = open(self.cohesion_log_file, 'w', newline='')
+        self.csv_writer = csv.writer(self.log_file_handle)
+        self.csv_writer.writerow(['timestamp', 'agent', 'num_neighbors', 'avg_pairwise_dist'])
+
+        # END NEW CODE
+
     def sonar_callback(self, msg):
         self.sonar_distance = msg.range
         distance_cm = self.sonar_distance
         # rospy.loginfo_throttle(1.0, f"[Sonar] Distance: {distance_cm} cm")
 
+
+    def model_state_callback(self, msg):
+        matched = False
+        for i, name in enumerate(msg.name):
+            if self.robot_name in name:  # handles 'miro01' and 'miro01::base_link'
+                position = msg.pose[i].position
+                self.pose.x = position.x
+                self.pose.y = position.y
+                self.pose.theta = 0.0
+                # print(f"&&&&&& [{self.robot_name}] matched {name} → pose: ({self.pose.x:.2f}, {self.pose.y:.2f})")
+                # rospy.loginfo_throttle(2.0, f"[{self.robot_name}] matched {name} → x={position.x:.2f}, y={position.y:.2f}")
+                matched = True
+                break
+
+        if not matched:
+            rospy.logwarn_throttle(10.0, f"[{self.robot_name}] not found in /gazebo/model_states. Available: {msg.name}")
+
+
+    # NEW CODE
+    def make_receive_neighbor_state(self, sender_id):
+        def callback(msg):
+            self.last_positions[sender_id] = (msg.x, msg.y)
+        return callback
+
+    # NEW CODE
+    def receive_neighbor_state(self, msg):
+        robot_ns = rospy.get_namespace().strip("/")
+        sender = msg._connection_header["callerid"].split("/")[1]
+        if sender != robot_ns:
+            self.last_positions[sender] = (msg.x, msg.y)
+            # print(f"[{self.robot_name}] received pose from {sender}: ({msg.x:.2f}, {msg.y:.2f})")
+
+
+    # NEW CODE 
+    def receive_neighbor_velocity(self, msg):
+        sender = msg._connection_header["callerid"].split("/")[1]
+        if sender != self.robot_name:
+            vx = msg.twist.linear.x
+            vy = msg.twist.linear.y if hasattr(msg.twist, "linear") else 0.0
+            self.last_velocities[sender] = np.array([vx, vy])
+
+
+    # NEW CODE 
+    def apply_boid_behavior(self):
+        my_x, my_y = self.pose.x, self.pose.y
+        separation = np.zeros(2)
+        alignment = np.zeros(2)
+        cohesion = np.zeros(2)
+        count = 0
+
+        for sender, (x, y) in self.last_positions.items():
+            dx = x - my_x
+            dy = y - my_y
+            dist = np.hypot(dx, dy)
+            if dist < 1e-5 or dist > self.boid_range:
+                continue
+
+            vec = np.array([dx, dy])
+            cohesion += vec
+            separation -= vec / (dist ** 2 + 1e-5)
+
+            # Use velocity from the neighbor if available
+            if sender in self.last_velocities:
+                alignment += self.last_velocities[sender]
+            else:
+                alignment += vec / (dist + 1e-5)
+
+            count += 1
+
+        if count > 0:
+            rospy.loginfo_throttle(2.0, f"[{self.robot_name}] Boid neighbors seen: {count}")
+            cohesion = cohesion / count
+            alignment = alignment / count
+
+            steer = (self.boid_weight_coh * cohesion +
+                    self.boid_weight_align * alignment +
+                    self.boid_weight_sep * separation)
+
+            norm = np.linalg.norm(steer)
+            if norm > 1e-3:
+                steer = steer / norm
+
+                # Convert (vx, vy) → heading angle → turn control
+                heading = np.arctan2(steer[1], steer[0])
+                error = heading - self.pose.theta
+                error = (error + np.pi) % (2 * np.pi) - np.pi  # Normalize
+
+                # Smooth turn
+                left = self.BASE_SPEED - 0.13 * error
+                right = self.BASE_SPEED + 0.13 * error
+                self.drive(left, right)
+
+    # NEW CODE for logging
+
+    def log_cohesion_metric(self):
+        positions = list(self.last_positions.values())
+        n = len(positions)
+        if n < 2:
+            print(f"[{self.robot_name}] Not enough neighbors to log cohesion (n={n})")
+            return
+
+        total_dist = 0
+        pairs = 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                dx = positions[i][0] - positions[j][0]
+                dy = positions[i][1] - positions[j][1]
+                dist = (dx**2 + dy**2)**0.5
+                total_dist += dist
+                pairs += 1
+
+        avg_dist = total_dist / pairs
+        timestamp = rospy.Time.now().to_sec()
+        self.csv_writer.writerow([timestamp, self.robot_name, n, avg_dist])
+        self.log_file_handle.flush()
+
+        rospy.loginfo_throttle(5.0, f"[{self.robot_name}] Cohesion avg distance: {avg_dist:.2f} (n={n})")
+
     def loop(self):
         """
         Main control loop
         """
-        print("MiRo boids-algorithm, press CTRL+C to halt...")
+        print("MiRo boids-algorithm, press CTRL+C to halt... " + str(self.robot_name))
         # Main control loop iteration counter
         self.counter = 0
         # This switch loops through MiRo behaviours:
         # Find ball, lock on to the ball and follow ball
         self.status_code = 0
         while not rospy.core.is_shutdown():
+
+            # start New code 
+            # Publish Gazebo position
+            # print(f"[{self.robot_name}] Publishing pose: {self.pose.x:.2f}, {self.pose.y:.2f}")
+            self.state_pub.publish(self.pose)
+
+            vel = TwistStamped()
+            now = rospy.Time.now().to_sec()
+            if self.prev_position is not None and self.prev_time is not None:
+                dt = now - self.prev_time
+                if dt > 0:
+                    vx = (self.pose.x - self.prev_position[0]) / dt
+                    vy = (self.pose.y - self.prev_position[1]) / dt
+                    vel.twist.linear.x = vx
+                    vel.twist.linear.y = vy
+            else:
+                vel.twist.linear.x = 0.0
+                vel.twist.linear.y = 0.0
+
+            self.prev_position = (self.pose.x, self.pose.y)
+            self.prev_time = now
+
+            self.velocity_pub.publish(vel)
+            # End New code 
+
+
             # Step 1. Find target MiRo
             if self.status_code == 1:
                 # Every once in a while, look for ball
@@ -449,6 +714,10 @@ class MiRoClient:
             # Yield
             self.counter += 1
             rospy.sleep(self.TICK)
+
+            # new code for logging
+            self.log_cohesion_metric()
+
 
 
 # This condition fires when the script is called directly

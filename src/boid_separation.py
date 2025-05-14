@@ -38,41 +38,36 @@ class MiRoClient:
     ##########################
     TICK = 0.02  # This is the update interval for the main control loop in secs
     CAM_FREQ = 1  # Number of ticks before camera gets a new frame, increase in case of network lag
-    FAST = 0.3  # Linear speed when following the ball (m/s)
     DEBUG = False # Set to True to enable debug views of the cameras
     IS_MIROCODE = False  # Set to True if running in MiRoCODE
+
+    # settings
     SAFE_DISTANCE = 0.135  # meters (adjust as needed)
     TURNING_FACTOR = 2  # Adjust this value to control the turning speed
     BASE_SPEED = 0.2  # Base speed for the robot
+    FOLLOW_SPEED = 0.6  # Speed for following MiRo
+    ROTATION_SPEED = 0.1  # Speed for rotating MiRo
     TURN_DURATION = 0.6  # seconds for approx 180 turn
-    FOLLOW_STOP_LIMIT = 70  # Number of frames before triggering escape
-    FACE_DETECTION_COOLDOWN = 4.0  # seconds to ignore face detection
+    FOLLOW_STOP_LIMIT = 150  # Number of frames before triggering escape
+    FACE_DETECTION_COOLDOWN = random.uniform(50.0, 200.0)   # seconds to ignore face detection
     ALIGNMENT_TIMEOUT = 4.0  # seconds to wait for alignment before switching to follow mode
     ##########################
     """
     End of script settings
     """
 
-
-    def drive(self, speed_l=0.1, speed_r=0.1):  # (m/sec, m/sec)
+    def drive(self, speed_l=0.1, speed_r=0.1):
         """
         Wrapper to simplify driving MiRo by converting wheel speeds to cmd_vel
         """
-        # Prepare an empty velocity command message
         msg_cmd_vel = TwistStamped()
-
-        # Desired wheel speed (m/sec)
         wheel_speed = [speed_l, speed_r]
-
-        # Convert wheel speed to command velocity (m/sec, Rad/sec)
         (dr, dtheta) = wheel_speed2cmd_vel(wheel_speed)
 
-        # Update the message with the desired speed
-        msg_cmd_vel.twist.linear.x = dr
-        msg_cmd_vel.twist.angular.z = dtheta
+        msg_cmd_vel.twist.linear.x = dr # Linear speed
+        msg_cmd_vel.twist.angular.z = dtheta # Angular speed
 
-        # Publish message to control/cmd_vel topic
-        self.vel_pub.publish(msg_cmd_vel)
+        self.vel_pub.publish(msg_cmd_vel) # Publish the command
 
     def callback_caml(self, ros_image):  # Left camera
         self.callback_cam(ros_image, 0)
@@ -102,22 +97,37 @@ class MiRoClient:
             # Ignore corrupted frames
             pass
 
-    def detect_miro(self, frame_rgb, debug=False):
+    def detect_miro(self, frame_rgb, index=0, debug=True):
         if frame_rgb is None:
             return None
 
         hsv = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2HSV)
 
-        lower_white = np.array([0, 0, 200])
-        upper_white = np.array([180, 30, 255])
-        mask = cv2.inRange(hsv, lower_white, upper_white)
+        # --- GREY Range PERFECT ---
+        lower_grey = np.array([0, 0, 30])
+        upper_grey = np.array([180, 60, 160])
+        mask_grey = cv2.inRange(hsv, lower_grey, upper_grey)
+
+        # --- WHITE Range ---
+        lower_white = np.array([0, 0, 190])
+        upper_white = np.array([180, 40, 255])
+        mask_white = cv2.inRange(hsv, lower_white, upper_white)
+
+        # --- Combine both masks ---
+        mask = cv2.bitwise_or(mask_grey, mask_white)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return None
 
         # Get largest white blob
-        largest = max(contours, key=cv2.contourArea)
+        MIN_AREA = 800  # Adjust based on resolution — 800+ is good for 512x512
+        filtered_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > MIN_AREA]
+
+        if not filtered_contours:
+            return None
+
+        largest = max(filtered_contours, key=cv2.contourArea)
         M = cv2.moments(largest)
         if M["m00"] == 0:
             return None
@@ -129,7 +139,7 @@ class MiRoClient:
         if debug:
             cv2.drawContours(frame_rgb, [largest], -1, (0, 255, 0), 2)
             cv2.circle(frame_rgb, (cx, cy), 5, (0, 0, 255), -1)
-            # cv2.imshow("White Body Detection", frame_rgb)
+            cv2.imshow(f"White Body Detection - Cam {index}", frame_rgb)
             cv2.waitKey(1)
 
         # Normalize
@@ -140,67 +150,12 @@ class MiRoClient:
 
         return [norm_x, norm_y, norm_r]
 
-
-    def detect_face_strict(self, image, debug=False):
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        _, thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY_INV)
-
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        eye_candidates = []
-        centers = []
-
-        for c in contours:
-            area = cv2.contourArea(c)
-            if 30 < area < 300:
-                perimeter = cv2.arcLength(c, True)
-                if perimeter == 0:
-                    continue
-                circularity = 4 * np.pi * area / (perimeter ** 2)
-                if circularity > 0.6:  # 1.0 = perfect circle
-                    M = cv2.moments(c)
-                    if M['m00'] != 0:
-                        cx = int(M['m10'] / M['m00'])
-                        cy = int(M['m01'] / M['m00'])
-                        eye_candidates.append(c)
-                        centers.append((cx, cy))
-
-        best_pair = None
-        best_y_diff = float('inf')
-
-        for i in range(len(centers)):
-            for j in range(i + 1, len(centers)):
-                cx1, cy1 = centers[i]
-                cx2, cy2 = centers[j]
-                y_diff = abs(cy1 - cy2)
-                x_diff = abs(cx1 - cx2)
-                if y_diff < 20 and 15 < x_diff < 120 and y_diff < best_y_diff:
-                    best_pair = ((cx1, cy1), (cx2, cy2))
-                    best_y_diff = y_diff
-
-        if debug:
-            debug_img = image.copy()
-            cv2.drawContours(debug_img, eye_candidates, -1, (0, 255, 0), 2)
-            for i, (cx, cy) in enumerate(centers):
-                cv2.circle(debug_img, (cx, cy), 4, (0, 0, 255), -1)
-                cv2.putText(debug_img, f"{i}", (cx + 5, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-
-            if best_pair:
-                cv2.line(debug_img, best_pair[0], best_pair[1], (255, 0, 0), 2)
-
-            cv2.imshow("Face Debug", debug_img)
-            cv2.imshow("Threshold", thresh)
-            cv2.waitKey(1)
-
-        return best_pair is not None
-
     def look_for_miro(self):
         """
         [1 of 3] Roam forward, and bounce off obstacles by turning 180°.
         """
         if self.just_switched:
-            print("MiRo is looking for the other MiRo...")
+            rospy.loginfo(f"[{self.miro_name}] wandering")
             self.just_switched = False
 
         # Check each camera for another MiRo
@@ -215,7 +170,7 @@ class MiRoClient:
             if self.sonar_distance is not None:
                 d = self.sonar_distance
                 if d < self.SAFE_DISTANCE:
-                    rospy.loginfo(f"[BOUNCE] Obstacle too close.")
+                    # rospy.loginfo(f"[BOUNCE] Obstacle too close.")
                     # Turn in place: full spin, then move forward again
                     start_time = rospy.Time.now().to_sec()
                     while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
@@ -231,17 +186,14 @@ class MiRoClient:
         else:
             # MiRo found!
             self.status_code = 2
-            self.just_switched = True
-
-
-    def lock_onto_miro(self):
+            self.just_switched = True    
+    
+    def steer_away(self):
         """
-        Combined: Align with target and move forward only if aligned & distance is safe.
+        [2 of 3] If the ball is too close, rotate MiRo away from it.
         """
         if self.just_switched:
-            print("MiRo is aligning and following the other MiRo...")
             self.just_switched = False
-            self.align_start_time = rospy.Time.now().to_sec()  # Start timing
 
         for index in range(2):
             if not self.new_frame[index]:
@@ -249,106 +201,43 @@ class MiRoClient:
             image = self.input_camera[index]
             self.target_miro[index] = self.detect_miro(image, index)
 
-        # Lost target
-        if not self.target_miro[0] and not self.target_miro[1]:
-            print("Target lost. Re-entering search mode...")
-            self.status_code = 1
-            self.just_switched = True
-            return
-        
-        # Alignment timeout escape
-        if rospy.Time.now().to_sec() - self.align_start_time > self.ALIGNMENT_TIMEOUT:
-            print("[ALIGNMENT TIMEOUT] Giving up and switching to follow mode.")
-            self.status_code = 3
-            self.just_switched = True
+        # Proximity thresholds
+        too_close_left = 0.1
+        too_close_right = 0.1
+        # rospy.loginfo(f"Left distance: {self.target_miro[0][2] if self.target_miro[0] else 'N/A'}, Right distance: {self.target_miro[1][2] if self.target_miro[1] else 'N/A'}")
+
+        # --- Steer away only ---
+        if self.target_miro[0] and self.target_miro[0][2] > too_close_left:
+            # print("Ball too close on left — turning right to avoid")
+            self.drive(self.ROTATION_SPEED, -self.ROTATION_SPEED)
             return
 
-        # Alignment logic
-        error_margin = 0.05
-        rotation_speed = 0.03
+        elif self.target_miro[1] and self.target_miro[1][2] > too_close_right:
+            # print("Ball too close on right — turning left to avoid")
+            self.drive(-self.ROTATION_SPEED, self.ROTATION_SPEED)
+            return
 
-        if self.target_miro[0] and self.target_miro[1]:
-            left_x = self.target_miro[0][0]
-            right_x = self.target_miro[1][0]
-            diff = abs(left_x) - abs(right_x)
+        # If ball is not too close (or not visible), proceed to next action
+        # print("Ball is at a safe distance — switching to follow.")
+        self.status_code = 3
+        self.just_switched = True
 
-            if diff > error_margin:
-                self.drive(rotation_speed, -rotation_speed)  # Clockwise
-            elif diff < -error_margin:
-                self.drive(-rotation_speed, rotation_speed)  # Counter-clockwise
-            else:
-                self.status_code = 3  # Switch to the second action
-                self.just_switched = True
-        
-        # Only one MiRo detected by one camera
-        elif self.target_miro[0]:
-            self.drive(-rotation_speed, rotation_speed)
-        elif self.target_miro[1]:
-            self.drive(rotation_speed, -rotation_speed)
 
     def follow(self):
         """
-        [3 of 3] MiRo moves forward for 1 second to simulate a 'follow',
-        unless it's too close to an obstacle or a face is detected.
-        If a face is detected, MiRo turns 180° instead of following.
+        [3 of 3] Once MiRO is in position, this function should drive the MiRo
+        forward until it kicks the ball!
         """
+        sonar_close = self.sonar_distance is not None and self.sonar_distance < self.SAFE_DISTANCE
+
         if self.just_switched:
-            print("MiRo is following the other miro!")
+            print("MiRo is kicking the ball!", sonar_close)
             self.just_switched = False
-            self.follow_end_time = rospy.Time.now().to_sec() + 1.0  # 1 second from now
-            return
 
-        # Check for face detection
-        # --- Face detection check with cooldown ---
-        now = rospy.Time.now().to_sec()
-        if now - self.last_face_detect_time > self.face_cooldown:
-            for index in range(2):
-                if self.new_frame[index]:
-                    image = self.input_camera[index]
-                    if self.detect_face_strict(image, debug=False):
-                        rospy.loginfo("[FACE DETECTED] Turning 180° instead of following.")
-                        self.last_face_detect_time = now  # prevent immediate retriggers
-                        start_time = rospy.Time.now().to_sec()
-                        while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
-                            self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
-                            rospy.sleep(self.TICK)
-                        self.status_code = 0
-                        self.just_switched = True
-                        self.follow_stop_counter = 0
-                        return
-
-
-        # Proceed with following if no face is detected
-        if rospy.Time.now().to_sec() < self.follow_end_time:
-            # --- Combined proximity check ---
-            visual_close = False
-            for i in range(2):
-                if self.target_miro[i] and self.target_miro[i][2] > 0.1:  # radius threshold from detect_miro
-                    visual_close = True
-                    break
-
-            sonar_close = self.sonar_distance is not None and self.sonar_distance < self.SAFE_DISTANCE
-
-            if visual_close or sonar_close:
-                # rospy.loginfo("[FOLLOW STOP] Too close! (Visual: %s, Sonar: %.3f m)", visual_close, self.sonar_distance or -1)
-                rospy.loginfo("[FOLLOW STOP] Too close!")
-                self.drive(0.0, 0.0)
-                self.follow_stop_counter += 1
-            else:
-                self.drive(self.FAST, self.FAST)  # Move forward with a bit more speed
-                self.follow_stop_counter = 0
-
-            if self.follow_stop_counter >= self.follow_stop_limit:
-                rospy.loginfo("[ESCAPE] Too many FOLLOW STOPs, turning 180° to reset.")
-                start_time = rospy.Time.now().to_sec()
-                while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
-                    self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
-                    rospy.sleep(self.TICK)
-                self.status_code = 0
-                self.just_switched = True
-                self.follow_stop_counter = 0
+        if not sonar_close:
+            self.drive(self.BASE_SPEED, self.BASE_SPEED)
         else:
-            self.status_code = 0
+            self.status_code = 0  # Back to the default state after the kick
             self.just_switched = True
 
 
@@ -360,6 +249,7 @@ class MiRoClient:
         rospy.sleep(2.0)
         # Initialise CV Bridge
         self.image_converter = CvBridge()
+        self.miro_name = os.getenv('MIRO_ROBOT_NAME')
         # Individual robot name acts as ROS topic prefix
         topic_base_name = "/" + os.getenv("MIRO_ROBOT_NAME")
         # Create two new subscribers to receive camera images with attached callbacks
@@ -400,17 +290,6 @@ class MiRoClient:
         self.frame_width = 640
         # Action selector to reduce duplicate printing to the terminal
         self.just_switched = True
-        # Bookmark
-        self.bookmark = 0
-        # Move the head to default pose
-        self.reset_head_pose()
-
-        # Initialise the 'follow' escape threshold
-        self.follow_stop_counter = 0
-        self.follow_stop_limit = self.FOLLOW_STOP_LIMIT  # Frames before triggering escape
-
-        self.last_face_detect_time = 0
-        self.face_cooldown = self.FACE_DETECTION_COOLDOWN  # seconds to ignore face detection
 
     def sonar_callback(self, msg):
         self.sonar_distance = msg.range
@@ -421,30 +300,43 @@ class MiRoClient:
         """
         Main control loop
         """
-        print("MiRo boids-algorithm, press CTRL+C to halt...")
-        # Main control loop iteration counter
+        print("MiRo boids-separation, press CTRL+C to halt...")
         self.counter = 0
-        # This switch loops through MiRo behaviours:
-        # Find ball, lock on to the ball and follow ball
         self.status_code = 0
+        self.status_start_time = rospy.Time.now().to_sec()
+
         while not rospy.core.is_shutdown():
-            # Step 1. Find target MiRo
+            now = rospy.Time.now().to_sec()
+            # Step 1. Find Miro
             if self.status_code == 1:
-                # Every once in a while, look for ball
+                # Every once in a while, look for miro
                 if self.counter % self.CAM_FREQ == 0:
                     self.look_for_miro()
 
-            # Step 2. Orient towards it
+            # Step 2. Align away from Miro
             elif self.status_code == 2:
-                self.lock_onto_miro()
+                if now - self.status_start_time > 1.0:
+                    self.status_code = 3
+                    self.status_start_time = now
+                else:
+                    self.steer_away()
+                    if self.status_code == 3:
+                        self.status_start_time = now
 
             # Step 3. Follow!
             elif self.status_code == 3:
-                self.follow()
+                if now - self.status_start_time > 0.5:
+                    self.status_code = 0
+                    self.status_start_time = now
+                else:
+                    self.follow()
+                    if self.status_code == 0:
+                        self.status_start_time = now
 
             # Fall back
             else:
                 self.status_code = 1
+                self.status_start_time = now
 
             # Yield
             self.counter += 1
