@@ -40,6 +40,7 @@ class MiRoClient:
     CAM_FREQ = 1  # Number of ticks before camera gets a new frame, increase in case of network lag
     SLOW = 0.1  # Radial speed when turning on the spot (rad/s)
     FAST = 0.3  # Linear speed when following the ball (m/s)
+    MAX_SPEED = 0.4  # Max speed for the robot when cohesion
     DEBUG = False # Set to True to enable debug views of the cameras
     TRANSLATION_ONLY = False # Whether to rotate only
     IS_MIROCODE = False  # Set to True if running in MiRoCODE
@@ -385,9 +386,12 @@ class MiRoClient:
         if rospy.Time.now().to_sec() < self.follow_end_time:
             # --- Combined proximity check ---
             visual_close = False
+            target_r = None
             for i in range(2):
-                if self.target_miro[i] and self.target_miro[i][2] > 0.1:  # radius threshold from detect_miro
-                    visual_close = True
+                if self.target_miro[i]:
+                    target_r = self.target_miro[i][2] # radius threshold from detect_miro
+                    if target_r > self.SAFE_DISTANCE:
+                        visual_close = True
                     break
 
             sonar_close = self.sonar_distance is not None and self.sonar_distance < self.SAFE_DISTANCE
@@ -398,7 +402,22 @@ class MiRoClient:
                 self.drive(0.0, 0.0)
                 self.follow_stop_counter += 1
             else:
-                self.drive(self.FAST, self.FAST)  # Move forward with a bit more speed
+                r_min = 0.035
+                r_max = 0.06
+                min_speed = self.FAST
+                max_speed = self.MAX_SPEED
+                if target_r is not None:
+                    if target_r <= r_min:
+                        speed = max_speed
+                    elif target_r >= r_max:
+                        speed = min_speed
+                    else:
+                        ratio = (r_max - target_r) / (r_max - r_min)
+                        speed = min_speed + (max_speed - min_speed) * ratio
+                    rospy.loginfo(f"[COHESION] target_r={target_r:.3f}, speed={speed:.3f}, sonar={self.sonar_distance}")
+                else:
+                    speed = min_speed
+                self.drive(speed, self.FAST)
                 self.follow_stop_counter = 0
 
             if self.follow_stop_counter >= self.follow_stop_limit:
