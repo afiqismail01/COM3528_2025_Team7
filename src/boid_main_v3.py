@@ -529,9 +529,6 @@ class MiRoClient:
             self.counter += 1
             rospy.sleep(self.TICK)
 
-            # new code for logging 
-            self.log_cohesion_metric()
-
 
 # This condition fires when the script is called directly
 if __name__ == "__main__":
