@@ -45,10 +45,11 @@ class MiRoClient:
     SAFE_DISTANCE = 0.13  # meters (adjust as needed)
     TURNING_FACTOR = 2  # Adjust this value to control the turning speed
     BASE_SPEED = 0.3  # Base speed for the robot
-    FOLLOW_SPEED = 0.5
-    TURN_DURATION = 1.8  # seconds for approx 180 turn
+    FOLLOW_SPEED = 0.4  # Speed for following the target
+
+    TURN_DURATION = 0.9  # seconds for approx 180 turn
     SEPARATION_TIMEOUT = 1.0  # seconds to wait for separation before switching to alignment mode
-    ALIGNMENT_TIMEOUT = 4.0  # seconds to wait for alignment before switching to follow mode
+    ALIGNMENT_TIMEOUT = 6.0  # seconds to wait for alignment before switching to follow mode
     FOLLOW_TIMEOUT = 0.5  # seconds to wait for follow before switching to alignment mode
     ##########################
     """
@@ -363,14 +364,30 @@ class MiRoClient:
             if self.new_frame[index]:
                 image = self.input_camera[index]
                 if self.detect_face_strict(image, debug=False):
-                    # rospy.loginfo("[FACE DETECTED] Turning 180° instead of following.")
+                    rospy.loginfo("[FACE DETECTED] Turning 180° instead of following.")
                     start_time = rospy.Time.now().to_sec()
                     while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
                         self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
                         rospy.sleep(self.TICK)
-                    self.status_code = 4
+                    self.status_code = 0
                     self.just_switched = True
                     return  
+                
+        target_r = None
+        for i in range(2):
+            if self.target_miro[i]:
+                target_r = self.target_miro[i][2]
+                break
+
+        if target_r is not None and target_r > 0.15:
+            rospy.loginfo("[TOO CLOSE] Target very close, turning 180°.")
+            start_time = rospy.Time.now().to_sec()
+            while rospy.Time.now().to_sec() - start_time < self.TURN_DURATION and not rospy.core.is_shutdown():
+                self.drive(speed_l=self.TURNING_FACTOR, speed_r=-self.TURNING_FACTOR)
+                rospy.sleep(self.TICK)
+            self.status_code = 0
+            self.just_switched = True
+            return
                     
         sonar_close = self.sonar_distance is not None and self.sonar_distance < self.SAFE_DISTANCE
 
@@ -379,9 +396,29 @@ class MiRoClient:
             rospy.loginfo(f"[{self.miro_name}] follow")
 
         if not sonar_close:
+            target_r = None
+            for i in range(2):
+                if self.target_miro[i]:
+                    target_r = self.target_miro[i][2]
+                    break
+            r_min = 0.035
+            r_max = 0.06
+            min_speed = self.BASE_SPEED
+            max_speed = self.FOLLOW_SPEED
+            if target_r is not None:
+                if target_r <= r_min:
+                    speed = max_speed
+                elif target_r >= r_max:
+                    speed = min_speed
+                else:
+                    ratio = (r_max - target_r) / (r_max - r_min)
+                    speed = min_speed + (max_speed - min_speed) * ratio
+                rospy.loginfo(f"[COHESION] target_r={target_r:.3f}, speed={speed:.3f}, sonar={self.sonar_distance}")
+            else:
+                speed = min_speed
             self.drive(self.FOLLOW_SPEED, self.FOLLOW_SPEED)
         else:
-            self.status_code = 0  # Back to the default state after the kick
+            self.status_code = 4  # Back to the default state after the kick
             self.just_switched = True
 
 
