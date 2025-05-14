@@ -426,8 +426,8 @@ class MiRoClient:
 
         while not rospy.core.is_shutdown():
             now = rospy.Time.now().to_sec()
-            self.just_switched = True
-            self.status_code = 5
+            # self.just_switched = True
+            # self.status_code = 5
             # Step 1. Find target MiRo
             if self.status_code == 1:
                 # Every once in a while, look for ball
