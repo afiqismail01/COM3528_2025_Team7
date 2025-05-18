@@ -50,7 +50,7 @@ All created development python codes should be placed in `src` directory.
 1. Target MiRo before running `rosrun` command for assigning the code to a particular MiRo
 
     ```bash
-    // MIRO_ROBOT_NAME=miro01
+    // MIRO_ROBOT_NAME="miro01"
     export MIRO_ROBOT_NAME=<miro_robot_name>
     ```
 
